@@ -770,7 +770,7 @@ class GlassBar(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         s = self.SHADOW
-        body = QRectF(self.rect()).adjusted(s, s, -s, -s)
+        body = QRectF(self.rect()).adjusted(s + 0.5, s + 0.5, -s - 0.5, -s - 0.5)
         p.setPen(Qt.NoPen)
         for i in range(12):
             p.setBrush(QColor(0, 0, 0, 9))
@@ -1330,10 +1330,12 @@ class MpvVideoWidget(QOpenGLWidget):
         pictures = Path.home() / "Pictures"
         self.mpv = mpv.MPV(
             vo="libmpv",
-            config=True,                # also read the user's mpv.conf
+            config=False,                # also read the user's mpv.conf
             input_default_bindings=False,
             input_vo_keyboard=False,
             osc=False,
+            osd_level=0,
+            osd_bar=False,
             keep_open=True,
             save_position_on_quit=True,
             volume_max=130,
@@ -1408,17 +1410,20 @@ class MpvVideoWidget(QOpenGLWidget):
         self._drain_gl_errors()
 
     def paintGL(self):
-        if not self.ctx:
-            return
-        ratio = self.devicePixelRatioF()
-        self.ctx.render(
-            flip_y=True,
-            opengl_fbo={
-                "w": int(self.width() * ratio),
-                "h": int(self.height() * ratio),
-                "fbo": self.defaultFramebufferObject(),
-            },
-        )
+     if not self.ctx:
+        return
+     ratio = self.devicePixelRatioF()
+     f = self.context().functions()
+     f.glClearColor(0.0, 0.0, 0.0, 1.0)
+     f.glClear(0x00004000)          # GL_COLOR_BUFFER_BIT
+     self.ctx.render(
+        flip_y=True,
+        opengl_fbo={
+            "w": round(self.width() * ratio),
+            "h": round(self.height() * ratio),
+            "fbo": self.defaultFramebufferObject(),
+        },
+    )
 
     def shutdown(self):
         if self.ctx is not None:
@@ -2952,9 +2957,15 @@ class MainWindow(QMainWindow):
         else:
             self._was_maximized = self.isMaximized()
             self.showFullScreen()
+            QTimer.singleShot(0, self._cover_screen)   # yeni
         self._activity()
         # Remove the curtain once the window size and GL surface have settled.
         QTimer.singleShot(280, self._finish_fullscreen_switch)
+
+    def _cover_screen(self):                            # yeni
+        if self.isFullScreen():
+            g = self.screen().geometry()
+            self.setGeometry(g.x(), g.y(), g.width(), g.height() + 1)
 
     def _finish_fullscreen_switch(self):
         self.curtain.fade_out(280)
